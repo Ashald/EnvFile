@@ -1,5 +1,6 @@
 package net.ashald.envfile;
 
+import net.ashald.envfile.exceptions.EnvFileErrorException;
 import org.apache.commons.text.StringSubstitutor;
 import org.jetbrains.annotations.NotNull;
 
@@ -8,10 +9,10 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
-public abstract class AbstractEnvVarsProvider implements EnvVarsProvider {
+public abstract class AbstractEnvFileProvider implements EnvFileProvider {
     private boolean isEnvVarSubstitutionEnabled;
 
-    public AbstractEnvVarsProvider(boolean shouldSubstituteEnvVar) {
+    public AbstractEnvFileProvider(boolean shouldSubstituteEnvVar) {
         isEnvVarSubstitutionEnabled = shouldSubstituteEnvVar;
     }
 

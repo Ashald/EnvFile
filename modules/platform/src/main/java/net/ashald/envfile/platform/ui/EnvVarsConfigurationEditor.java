@@ -7,9 +7,12 @@ import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.options.SettingsEditor;
 import com.intellij.openapi.util.JDOMExternalizerUtil;
 import com.intellij.openapi.util.Key;
-import net.ashald.envfile.EnvFileErrorException;
+import net.ashald.envfile.exceptions.EnvFileErrorException;
+import net.ashald.envfile.exceptions.EnvSingleErrorException;
+import net.ashald.envfile.platform.EnvVarsEntry;
 import net.ashald.envfile.platform.EnvFileEntry;
 import net.ashald.envfile.platform.EnvFileSettings;
+import net.ashald.envfile.platform.EnvSingleEntry;
 import org.jdom.Element;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NonNls;
@@ -23,7 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public class EnvFileConfigurationEditor<T extends RunConfigurationBase> extends SettingsEditor<T> {
+public class EnvVarsConfigurationEditor<T extends RunConfigurationBase> extends SettingsEditor<T> {
     private static final Key<EnvFileSettings> USER_DATA_KEY = new Key<EnvFileSettings>("EnvFile Settings");
 
     @NonNls private static final String SERIALIZATION_ID = "net.ashald.envfile";
@@ -39,10 +42,14 @@ public class EnvFileConfigurationEditor<T extends RunConfigurationBase> extends 
     @NonNls private static final String FIELD_PATH = "PATH";
     @NonNls private static final String FIELD_PARSER = "PARSER";
 
-    private EnvFileConfigurationPanel editor;
+    @NonNls private static final String FIELD_SELECTED_OPTION = "SELECTED_OPTIONS";
+    @NonNls private static final String FIELD_ENV_NAME = "ENV_NAME";
 
-    public EnvFileConfigurationEditor(T configuration) {
-        editor = new EnvFileConfigurationPanel<T>(configuration);
+
+    private EnvVarsConfigurationPanel editor;
+
+    public EnvVarsConfigurationEditor(T configuration) {
+        editor = new EnvVarsConfigurationPanel<T>(configuration);
     }
 
     public static String getEditorTitle() {
@@ -84,7 +91,7 @@ public class EnvFileConfigurationEditor<T extends RunConfigurationBase> extends 
         String experimentalIntegrationsStr = JDOMExternalizerUtil.readField(element, FIELD_EXPERIMENTAL_INTEGRATIONS, "false");
         boolean experimentalIntegrations = Boolean.parseBoolean(experimentalIntegrationsStr);
 
-        List<EnvFileEntry> entries = new ArrayList<EnvFileEntry>();
+        List<EnvVarsEntry> entries = new ArrayList<EnvVarsEntry>();
 
         final Element entriesElement = element.getChild(ELEMENT_ENTRY_LIST);
         if (entriesElement != null) {
@@ -95,15 +102,23 @@ public class EnvFileConfigurationEditor<T extends RunConfigurationBase> extends 
                 boolean isEntryEnabled = Boolean.parseBoolean(isEntryEnabledStr);
 
                 String parserId = envElement.getAttributeValue(FIELD_PARSER, "~");
-                String path = envElement.getAttributeValue(FIELD_PATH);
 
-                entries.add(new EnvFileEntry(configuration, parserId, path, isEntryEnabled, envVarsSubstEnabled));
+
+                String selectedOption = envElement.getAttributeValue(FIELD_SELECTED_OPTION);
+                String envName = envElement.getAttributeValue(FIELD_ENV_NAME);
+                if (selectedOption != null && envName != null) {
+                    entries.add(new EnvSingleEntry(configuration, parserId, envName, selectedOption, isEntryEnabled,
+                            envVarsSubstEnabled));
+                } else {
+                    String path = envElement.getAttributeValue(FIELD_PATH);
+                    entries.add(new EnvFileEntry(configuration, parserId, path, isEntryEnabled, envVarsSubstEnabled));
+                }
             }
         }
 
         // For a while to migrate old users - begin
         boolean hasConfigEntry = false;
-        for (EnvFileEntry e : entries) {
+        for (EnvVarsEntry e : entries) {
             if (e.getParserId().equals("runconfig")) {
                 hasConfigEntry = true;
                 break;
@@ -128,14 +143,28 @@ public class EnvFileConfigurationEditor<T extends RunConfigurationBase> extends 
             JDOMExternalizerUtil.writeField(element, FIELD_EXPERIMENTAL_INTEGRATIONS, Boolean.toString(state.isEnableExperimentalIntegrations()));
 
             final Element entriesElement = new Element(ELEMENT_ENTRY_LIST);
-            for (EnvFileEntry entry : state.getEntries()) {
+            for (EnvVarsEntry entry : state.getEntries()) {
                 final Element entryElement = new Element(ELEMENT_ENTRY_SINGLE);
                 entryElement.setAttribute(FIELD_IS_ENABLED, Boolean.toString(entry.isEnabled()));
                 entryElement.setAttribute(FIELD_PARSER, entry.getParserId());
-                String path = entry.getPath();
-                if (path != null) {
-                    entryElement.setAttribute(FIELD_PATH, entry.getPath());
+
+                if(entry instanceof EnvFileEntry) {
+                    String path = ((EnvFileEntry)entry).getPath();
+                    if (path != null) {
+                        entryElement.setAttribute(FIELD_PATH, ((EnvFileEntry)entry).getPath());
+                    }
+                } else {
+                    String envName = ((EnvSingleEntry)entry).getEnvVarName();
+                    if (envName != null) {
+                        entryElement.setAttribute(FIELD_ENV_NAME, envName);
+                    }
+                    String selectedOption = ((EnvSingleEntry)entry).getSelectedOption();
+                    if (selectedOption != null) {
+                        entryElement.setAttribute(FIELD_SELECTED_OPTION, selectedOption);
+                    }
                 }
+
+
                 entriesElement.addContent(entryElement);
             }
             element.addContent(entriesElement);
@@ -146,10 +175,10 @@ public class EnvFileConfigurationEditor<T extends RunConfigurationBase> extends 
         EnvFileSettings state = runConfigurationBase.getUserData(USER_DATA_KEY);
         if (state != null && state.isEnabled()) {
             Map<String, String> result = new HashMap<>();
-            for (EnvFileEntry entry : state.getEntries()) {
+            for (EnvVarsEntry entry : state.getEntries()) {
                 try {
                     result = entry.process(runConfigEnv, result, state.isIgnoreMissing());
-                } catch (EnvFileErrorException | IOException e) {
+                } catch (EnvFileErrorException | EnvSingleErrorException | IOException e) {
                     throw new ExecutionException(e);
                 }
             }
@@ -167,14 +196,23 @@ public class EnvFileConfigurationEditor<T extends RunConfigurationBase> extends 
     public static void validateConfiguration(@NotNull RunConfigurationBase configuration, boolean isExecution) throws ExecutionException {
         EnvFileSettings state = configuration.getUserData(USER_DATA_KEY);
         if (state != null && state.isEnabled()) {
-            for (EnvFileEntry entry : state.getEntries()) {
+            for (EnvVarsEntry entry : state.getEntries()) {
                 if (entry.isEnabled()) {
-                    if (!entry.validatePath() && !state.isIgnoreMissing()) {
-                        throw new ExecutionException(String.format("EnvFile: invalid path - %s", entry.getPath()));
-                    }
+                    if (entry instanceof EnvFileEntry) {
+                        if (!((EnvFileEntry)entry).validatePath() && !state.isIgnoreMissing()) {
+                            throw new ExecutionException(String.format("EnvFile: invalid path - %s",
+                                    ((EnvFileEntry)entry).getPath()));
+                        }
 
-                    if (!entry.validateType()) {
-                        throw new ExecutionException(String.format("EnvFile: cannot load parser '%s' for '%s'", entry.getParserId(), entry.getPath()));
+                        if (!entry.validateType()) {
+                            throw new ExecutionException(String.format("EnvFile: cannot load parser '%s' for '%s'",
+                                    entry.getParserId(), ((EnvFileEntry)entry).getPath()));
+                        }
+                    } else {
+                        if (!entry.validateType()) {
+                            throw new ExecutionException(String.format("EnvFile: cannot load parser '%s' for env var '%s'",
+                                    entry.getParserId(), ((EnvSingleEntry)entry).getEnvVarName()));
+                        }
                     }
                 }
             }

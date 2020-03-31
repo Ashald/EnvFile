@@ -3,10 +3,10 @@ package net.ashald.envfile;
 import org.jetbrains.annotations.NotNull;
 
 
-public interface EnvVarsProviderFactory {
+public interface EnvVarsProviderFactory<T extends EnvVarsProvider> {
 
     @NotNull
-    EnvVarsProvider createProvider(boolean shouldSubstituteEnvVar);
+    T createProvider(boolean shouldSubstituteEnvVar);
 
     @NotNull String getTitle();
 

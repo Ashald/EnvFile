@@ -1,15 +1,15 @@
 package net.ashald.envfile.providers.runconfig;
 
-import net.ashald.envfile.AbstractEnvVarsProvider;
+import net.ashald.envfile.AbstractEnvFileProvider;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 
-public class RunConfigEnvVarsProvider extends AbstractEnvVarsProvider {
+public class RunConfigEnvProvider extends AbstractEnvFileProvider {
 
-    public RunConfigEnvVarsProvider(boolean shouldSubstituteEnvVar) {
+    public RunConfigEnvProvider(boolean shouldSubstituteEnvVar) {
         super(shouldSubstituteEnvVar);
     }
 

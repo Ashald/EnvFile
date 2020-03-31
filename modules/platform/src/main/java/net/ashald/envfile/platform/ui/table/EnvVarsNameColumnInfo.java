@@ -3,7 +3,9 @@ package net.ashald.envfile.platform.ui.table;
 import com.intellij.ui.JBColor;
 import com.intellij.util.ui.ColumnInfo;
 import com.intellij.util.ui.UIUtil;
+import net.ashald.envfile.platform.EnvVarsEntry;
 import net.ashald.envfile.platform.EnvFileEntry;
+import net.ashald.envfile.platform.EnvSingleEntry;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -12,19 +14,19 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableCellRenderer;
 import java.awt.*;
 
-public class EnvFileTypeColumnInfo extends ColumnInfo<EnvFileEntry, EnvFileEntry> {
-    public EnvFileTypeColumnInfo() {
-        super("Type");
+public class EnvVarsNameColumnInfo extends ColumnInfo<EnvVarsEntry, EnvVarsEntry> {
+    public EnvVarsNameColumnInfo() {
+        super("Name");
     }
 
     @Nullable
     @Override
-    public EnvFileEntry valueOf(EnvFileEntry envFileEntry) {
-        return envFileEntry;
+    public EnvVarsEntry valueOf(EnvVarsEntry envVarsEntry) {
+        return envVarsEntry;
     }
 
     @Override
-    public TableCellRenderer getRenderer(final EnvFileEntry p0) {
+    public TableCellRenderer getRenderer(final EnvVarsEntry p0) {
         return new DefaultTableCellRenderer() {
             @NotNull
             @Override
@@ -35,8 +37,19 @@ public class EnvFileTypeColumnInfo extends ColumnInfo<EnvFileEntry, EnvFileEntry
                                                            int row,
                                                            int column) {
                 final Component renderer = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-                EnvFileEntry entry = (EnvFileEntry) value;
-                setText(entry.getTypeTitle());
+                EnvVarsEntry entry = (EnvVarsEntry) value;
+
+                if (p0.getParserId().equals("runconfig")) { // TODO make generic
+                    setText("");
+                } else if (entry instanceof EnvFileEntry) {
+                    String path = ((EnvFileEntry) entry).getPath();
+                    if (path != null) {
+                        String[] splittedPath = path.split("/");
+                        setText(splittedPath[splittedPath.length - 1]);
+                    }
+                } else {
+                    setText(((EnvSingleEntry)entry).getEnvVarName());
+                }
                 setBorder(null);
 
                 if (entry.isEnabled()) {
@@ -44,6 +57,8 @@ public class EnvFileTypeColumnInfo extends ColumnInfo<EnvFileEntry, EnvFileEntry
                         setForeground(JBColor.RED);
                         setToolTipText("Parser not found!");
                     }
+
+
                 } else {
                     setForeground(UIUtil.getLabelDisabledForeground());
                 }
